@@ -1,101 +1,225 @@
-import Image from "next/image";
+
+"use client";
+
+import React, { useState , useEffect } from "react";
+import { useWallet, type Wallet } from "@txnlab/use-wallet-react";
+import { Modal } from "@/components/WalletModal";
+import { Button } from "@/components/ui/button"
+import algosdk from "algosdk";
+
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  const {
+    algodClient,
+    activeAddress,
+    activeNetwork,
+    setActiveNetwork,
+    transactionSigner,
+    wallets,
+  } = useWallet();
+
+  // const [isSending, setIsSending] = React.useState(false);
+  const [isConnected, setIsConnected] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [balance, setBalance] = useState<number | null>(null)
+  const [transactionInProgress, setTransactionInProgress] =
+  useState<boolean>(false);
+const [isSending, setIsSending] = useState(false);
+const [transactionLink, setTransactionLink] = useState('');
+
+  const handleConnect = () => {
+    setIsModalOpen(true)
+  }
+
+  const handleDisconnect = () => {
+    const activeWallet = wallets.find(wallet => wallet.isConnected)
+    if (activeWallet) {
+      activeWallet.disconnect()
+      
+    }
+  }
+
+  const sign_verify = async () => {
+    try {
+      if (!activeAddress) {
+        throw new Error("[App] No active account");
+      }
+
+      
+      const suggestedParams = await algodClient.getTransactionParams().do();
+      
+      // const transaction = algosdk.makePaymentTxnWithSuggestedParamsFromObject({
+      //   from: activeAddress,
+      //   to: activeAddress,
+      //   amount: 0, // Zero amount for verification
+      //   note: new Uint8Array(Buffer.from("Please verify your wallet!")),
+      //   suggestedParams,
+      // });
+
+      const tx = algosdk.makeApplicationCallTxnFromObject({
+        from: activeAddress,
+        appIndex: 1,
+        onComplete: algosdk.OnApplicationComplete.NoOpOC,
+        appArgs: [],
+        accounts: [],
+        foreignApps: [],
+        foreignAssets: [],
+        note: new Uint8Array(Buffer.from("Please verify your wallet!")),
+        suggestedParams,
+      });
+
+
+
+
+      setIsSending(true);
+
+      try {
+        const result = await transactionSigner([tx], [0]);
+        console.info(`[App] ✅ Successfully sent transaction!`, result);
+  
+       
+      } catch (error) {
+        console.error('Transaction failed', error);
+       
+        } finally {
+          setIsSending(false);
+        }
+      }
+      catch (error) {
+        console.error('Transaction failed', error);
+       
+      } finally {
+        setIsSending(false);
+      }
+    };
+
+    const sendTransaction = async () => {
+      try {
+        if (!activeAddress) {
+          throw new Error("[App] No active account");
+        }
+      
+        
+
+        const at = new algosdk.AtomicTransactionComposer();
+       
+        
+        const suggestedParams = await algodClient.getTransactionParams().do();
+        
+        const transaction = algosdk.makePaymentTxnWithSuggestedParamsFromObject({
+          from: activeAddress,
+          to: activeAddress,
+          amount: 0, // Zero amount for testing
+          note: new Uint8Array(Buffer.from("Please verify your wallet!")),
+          suggestedParams,
+        });
+        
+        at.addTransaction({ txn: transaction, signer: transactionSigner });
+
+        setIsSending(true);
+  
+        try {
+         
+          const result = await at.execute(algodClient,4);
+          
+          const explorerLink = `https://testnet.explorer.perawallet.app/tx/${result.txIDs}`;
+          setTransactionLink(explorerLink);
+          alert(`Transaction sent! ${explorerLink}`);
+          console.log(explorerLink);
+
+
+          
+
+          console.info(`[App] ✅ Successfully sent transaction!`, result);
+    
+         
+        } catch (error) {
+          console.error('Transaction failed', error);
+         
+          } finally {
+            setIsSending(false);
+          }
+        }
+        catch (error) {
+          console.error('Transaction failed', error);
+         
+        } finally {
+          setIsSending(false);
+        }
+      };
+
+
+  useEffect(() => {
+    const fetchBalance = async () => {
+      if (activeAddress) {
+        const accountInfo = await algodClient.accountInformation(activeAddress).do()
+        setBalance(accountInfo.amount / 1_000_000) // Convert microAlgos to Algos
+      } else {
+        setBalance(null)
+      }
+    }
+    fetchBalance()
+  }, [activeAddress, algodClient])
+
+
+
+
+  return (
+    <>
+      {activeAddress ? (
+        <div className="flex justify-center items-center space-x-4 min-h-screen">
+          <Button onClick={handleDisconnect} variant="outline">
+            Disconnect
+          </Button>
+          <div className="text-sm">
+            Balance: {balance !== null ? `${balance.toFixed(2)} Algo` : 'Loading...'}
+          </div>
+          <Button onClick={sendTransaction} disabled={isSending || transactionInProgress}>
+             Send Transaction
+          </Button>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
-  );
+      ) : (
+        <div className="flex justify-center items-center min-h-screen">
+        <Button onClick={handleConnect}>Connect Wallet</Button>
+        </div>
+      )}
+
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
+        <WalletList onClose={() => setIsModalOpen(false)} />
+      </Modal>
+    </>
+  )
 }
+
+function WalletList({ onClose }: { onClose: () => void }) {
+  const { wallets } = useWallet()
+
+  const handleConnect = async (wallet: Wallet) => {
+    await wallet.connect()
+    onClose()
+  }
+
+  return (
+    <div className="p-2">
+      <h2 className="text-lg font-bold mb-4 text-center">Connect Your Wallet</h2>
+      <div className="space-y-2">
+        {wallets.map((wallet) => (
+          <div key={wallet.id} className="w-full mb-2 flex justify-center">
+          <Button
+            key={wallet.id}
+            onClick={() => handleConnect(wallet)}
+            className="w-[50%] justify-center"
+          >
+            {wallet.metadata.name}
+            <span className="flex-1" />
+            <img src={wallet.metadata.icon} alt="wallet icon" className="w-6 h-6 mr-2" />
+            
+          </Button>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
